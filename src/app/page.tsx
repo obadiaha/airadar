@@ -28,7 +28,7 @@ export default function HomePage() {
 
           <div className="flex flex-wrap items-center justify-center gap-4 mb-12">
             <a href="#demo" className="btn-primary text-base px-8 py-3">
-              Try Free Demo ↓
+              Try Live Scan — Free ↓
             </a>
             <a href="#pricing" className="btn-secondary text-base px-8 py-3">
               View Pricing
@@ -156,8 +156,8 @@ export default function HomePage() {
                 a: "We send category-relevant prompts to ChatGPT, Perplexity, and Gemini, then analyze the responses to detect brand mentions. We track this over time to show your citation share trend.",
               },
               {
-                q: "Is the demo data real?",
-                a: "The landing page demo uses simulated data to show you what the tool does. Once you sign up, all scans use real, live API queries to actual AI platforms.",
+                q: "Is the scan data real?",
+                a: "Yes! The free scan on this page queries real AI platforms (ChatGPT, Perplexity, Gemini) in real-time. Sign up to track your scores over time with weekly monitoring.",
               },
               {
                 q: "How is this different from SEO tools?",

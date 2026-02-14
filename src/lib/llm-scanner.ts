@@ -7,6 +7,22 @@ export interface ScanResult {
   prompt: string;
   response: string;
   brandsFound: string[];
+  error?: string;
+}
+
+export interface LLMStatus {
+  chatgpt: boolean;
+  perplexity: boolean;
+  gemini: boolean;
+}
+
+// Check which LLM API keys are configured
+export function getAvailableLLMs(): LLMStatus {
+  return {
+    chatgpt: !!process.env.OPENAI_API_KEY,
+    perplexity: !!process.env.PERPLEXITY_API_KEY,
+    gemini: !!process.env.GEMINI_API_KEY,
+  };
 }
 
 // Generate category-relevant prompts
@@ -20,11 +36,25 @@ export function generatePrompts(keyword: string): string[] {
   ];
 }
 
+// Lighter set of prompts for demo/landing page (cost-efficient)
+export function generateLitePrompts(keyword: string): string[] {
+  return [
+    `What are the best ${keyword}?`,
+    `Can you recommend some top ${keyword} for 2025?`,
+    `What are the leading ${keyword} in the market?`,
+  ];
+}
+
 // Query ChatGPT and parse response for brand mentions
 export async function scanChatGPT(
   prompt: string,
   brands: string[]
 ): Promise<ScanResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return { llm: "chatgpt", prompt, response: "", brandsFound: [], error: "API key not configured" };
+  }
+
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -37,8 +67,9 @@ export async function scanChatGPT(
 
     return { llm: "chatgpt", prompt, response, brandsFound };
   } catch (error) {
-    console.error("ChatGPT scan error:", error);
-    return { llm: "chatgpt", prompt, response: "Error querying ChatGPT", brandsFound: [] };
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("ChatGPT scan error:", msg);
+    return { llm: "chatgpt", prompt, response: "", brandsFound: [], error: msg };
   }
 }
 
@@ -49,7 +80,7 @@ export async function scanPerplexity(
 ): Promise<ScanResult> {
   const apiKey = process.env.PERPLEXITY_API_KEY;
   if (!apiKey) {
-    return { llm: "perplexity", prompt, response: "Perplexity API key not configured", brandsFound: [] };
+    return { llm: "perplexity", prompt, response: "", brandsFound: [], error: "API key not configured" };
   }
 
   try {
@@ -66,25 +97,31 @@ export async function scanPerplexity(
       }),
     });
 
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Perplexity API ${res.status}: ${errText}`);
+    }
+
     const data = await res.json();
     const response = data.choices?.[0]?.message?.content || "";
     const brandsFound = findBrands(response, brands);
 
     return { llm: "perplexity", prompt, response, brandsFound };
   } catch (error) {
-    console.error("Perplexity scan error:", error);
-    return { llm: "perplexity", prompt, response: "Error querying Perplexity", brandsFound: [] };
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Perplexity scan error:", msg);
+    return { llm: "perplexity", prompt, response: "", brandsFound: [], error: msg };
   }
 }
 
-// Query Gemini via OpenAI-compatible endpoint
+// Query Gemini API
 export async function scanGemini(
   prompt: string,
   brands: string[]
 ): Promise<ScanResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return { llm: "gemini", prompt, response: "Gemini API key not configured", brandsFound: [] };
+    return { llm: "gemini", prompt, response: "", brandsFound: [], error: "API key not configured" };
   }
 
   try {
@@ -99,19 +136,25 @@ export async function scanGemini(
       }
     );
 
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Gemini API ${res.status}: ${errText}`);
+    }
+
     const data = await res.json();
     const response = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
     const brandsFound = findBrands(response, brands);
 
     return { llm: "gemini", prompt, response, brandsFound };
   } catch (error) {
-    console.error("Gemini scan error:", error);
-    return { llm: "gemini", prompt, response: "Error querying Gemini", brandsFound: [] };
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error("Gemini scan error:", msg);
+    return { llm: "gemini", prompt, response: "", brandsFound: [], error: msg };
   }
 }
 
 // Find which brands are mentioned in a response
-function findBrands(text: string, brands: string[]): string[] {
+export function findBrands(text: string, brands: string[]): string[] {
   const lowerText = text.toLowerCase();
   return brands.filter((brand) => {
     const lowerBrand = brand.toLowerCase();
@@ -125,7 +168,7 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Run a full scan across all LLMs for a keyword
+// Run a full scan across all LLMs for a keyword (5 prompts × 3 LLMs = 15 calls)
 export async function runFullScan(
   keyword: string,
   brands: string[]
@@ -143,4 +186,42 @@ export async function runFullScan(
   }
 
   return results;
+}
+
+// Run a lighter scan for demo/landing page (3 prompts × 3 LLMs = 9 calls)
+export async function runLiteScan(
+  keyword: string,
+  brands: string[]
+): Promise<ScanResult[]> {
+  const prompts = generateLitePrompts(keyword);
+  const results: ScanResult[] = [];
+
+  // Run all prompts in parallel for speed
+  const allPromises = prompts.map((prompt) =>
+    Promise.all([
+      scanChatGPT(prompt, brands),
+      scanPerplexity(prompt, brands),
+      scanGemini(prompt, brands),
+    ])
+  );
+
+  const allResults = await Promise.all(allPromises);
+  for (const [chatgpt, perplexity, gemini] of allResults) {
+    results.push(chatgpt, perplexity, gemini);
+  }
+
+  return results;
+}
+
+// Scan a single prompt across all LLMs (for testing)
+export async function scanSinglePrompt(
+  prompt: string,
+  brands: string[]
+): Promise<ScanResult[]> {
+  const [chatgpt, perplexity, gemini] = await Promise.all([
+    scanChatGPT(prompt, brands),
+    scanPerplexity(prompt, brands),
+    scanGemini(prompt, brands),
+  ]);
+  return [chatgpt, perplexity, gemini];
 }
