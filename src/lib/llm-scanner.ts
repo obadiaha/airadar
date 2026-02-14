@@ -1,7 +1,5 @@
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "" });
-
 export interface ScanResult {
   llm: string;
   prompt: string;
@@ -19,10 +17,17 @@ export interface LLMStatus {
 // Check which LLM API keys are configured
 export function getAvailableLLMs(): LLMStatus {
   return {
-    chatgpt: !!process.env.OPENAI_API_KEY,
-    perplexity: !!process.env.PERPLEXITY_API_KEY,
-    gemini: !!process.env.GEMINI_API_KEY,
+    chatgpt: !!(process.env.OPENAI_API_KEY?.trim()),
+    perplexity: !!(process.env.PERPLEXITY_API_KEY?.trim()),
+    gemini: !!(process.env.GEMINI_API_KEY?.trim()),
   };
+}
+
+// Lazily create OpenAI client to ensure env vars are available
+function getOpenAIClient(): OpenAI {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+  return new OpenAI({ apiKey });
 }
 
 // Generate category-relevant prompts
@@ -50,12 +55,13 @@ export async function scanChatGPT(
   prompt: string,
   brands: string[]
 ): Promise<ScanResult> {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     return { llm: "chatgpt", prompt, response: "", brandsFound: [], error: "API key not configured" };
   }
 
   try {
+    const openai = getOpenAIClient();
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
@@ -78,7 +84,7 @@ export async function scanPerplexity(
   prompt: string,
   brands: string[]
 ): Promise<ScanResult> {
-  const apiKey = process.env.PERPLEXITY_API_KEY;
+  const apiKey = process.env.PERPLEXITY_API_KEY?.trim();
   if (!apiKey) {
     return { llm: "perplexity", prompt, response: "", brandsFound: [], error: "API key not configured" };
   }
@@ -99,7 +105,7 @@ export async function scanPerplexity(
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Perplexity API ${res.status}: ${errText}`);
+      throw new Error(`Perplexity API ${res.status}: ${errText.substring(0, 200)}`);
     }
 
     const data = await res.json();
@@ -119,7 +125,7 @@ export async function scanGemini(
   prompt: string,
   brands: string[]
 ): Promise<ScanResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     return { llm: "gemini", prompt, response: "", brandsFound: [], error: "API key not configured" };
   }
@@ -138,7 +144,7 @@ export async function scanGemini(
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Gemini API ${res.status}: ${errText}`);
+      throw new Error(`Gemini API ${res.status}: ${errText.substring(0, 200)}`);
     }
 
     const data = await res.json();

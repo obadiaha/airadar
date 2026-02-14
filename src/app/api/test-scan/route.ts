@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { scanSinglePrompt, getAvailableLLMs, findBrands } from "@/lib/llm-scanner";
+import { scanSinglePrompt, getAvailableLLMs } from "@/lib/llm-scanner";
 
 export const maxDuration = 30;
 
@@ -11,6 +11,19 @@ export async function GET(request: Request) {
   const prompt = `What are the best ${keyword}?`;
 
   const llmStatus = getAvailableLLMs();
+
+  // Key diagnostics (safe — only shows prefix/length, never full key)
+  const keyDiag = {
+    openai: process.env.OPENAI_API_KEY
+      ? { length: process.env.OPENAI_API_KEY.length, prefix: process.env.OPENAI_API_KEY.substring(0, 7) + "...", trimmedLength: process.env.OPENAI_API_KEY.trim().length }
+      : null,
+    perplexity: process.env.PERPLEXITY_API_KEY
+      ? { length: process.env.PERPLEXITY_API_KEY.length, prefix: process.env.PERPLEXITY_API_KEY.substring(0, 7) + "...", trimmedLength: process.env.PERPLEXITY_API_KEY.trim().length }
+      : null,
+    gemini: process.env.GEMINI_API_KEY
+      ? { length: process.env.GEMINI_API_KEY.length, prefix: process.env.GEMINI_API_KEY.substring(0, 7) + "...", trimmedLength: process.env.GEMINI_API_KEY.trim().length }
+      : null,
+  };
 
   try {
     const results = await scanSinglePrompt(prompt, brands);
@@ -33,6 +46,7 @@ export async function GET(request: Request) {
       keyword,
       brands,
       llmStatus,
+      keyDiagnostics: keyDiag,
       results: summary,
       timestamp: new Date().toISOString(),
     });
@@ -42,6 +56,7 @@ export async function GET(request: Request) {
         status: "error",
         error: error instanceof Error ? error.message : "Unknown error",
         llmStatus,
+        keyDiagnostics: keyDiag,
         timestamp: new Date().toISOString(),
       },
       { status: 500 }
