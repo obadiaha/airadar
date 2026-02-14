@@ -3,6 +3,21 @@ import { scanSinglePrompt, getAvailableLLMs } from "@/lib/llm-scanner";
 
 export const maxDuration = 30;
 
+function diagnoseKey(raw: string | undefined, expectedPrefix: string) {
+  if (!raw) return { status: "missing", raw: null };
+  const trimmed = raw.trim();
+  if (!trimmed) return { status: "empty_or_whitespace", rawLength: raw.length, trimmedLength: 0 };
+  const validPrefix = trimmed.startsWith(expectedPrefix);
+  return {
+    status: validPrefix ? "looks_valid" : "unexpected_prefix",
+    rawLength: raw.length,
+    trimmedLength: trimmed.length,
+    prefix: trimmed.substring(0, Math.min(8, trimmed.length)) + "...",
+    expectedPrefix,
+    hasWhitespace: raw !== trimmed,
+  };
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const keyword = searchParams.get("keyword") || "project management tools";
@@ -14,15 +29,9 @@ export async function GET(request: Request) {
 
   // Key diagnostics (safe — only shows prefix/length, never full key)
   const keyDiag = {
-    openai: process.env.OPENAI_API_KEY
-      ? { length: process.env.OPENAI_API_KEY.length, prefix: process.env.OPENAI_API_KEY.substring(0, 7) + "...", trimmedLength: process.env.OPENAI_API_KEY.trim().length }
-      : null,
-    perplexity: process.env.PERPLEXITY_API_KEY
-      ? { length: process.env.PERPLEXITY_API_KEY.length, prefix: process.env.PERPLEXITY_API_KEY.substring(0, 7) + "...", trimmedLength: process.env.PERPLEXITY_API_KEY.trim().length }
-      : null,
-    gemini: process.env.GEMINI_API_KEY
-      ? { length: process.env.GEMINI_API_KEY.length, prefix: process.env.GEMINI_API_KEY.substring(0, 7) + "...", trimmedLength: process.env.GEMINI_API_KEY.trim().length }
-      : null,
+    openai: diagnoseKey(process.env.OPENAI_API_KEY, "sk-"),
+    perplexity: diagnoseKey(process.env.PERPLEXITY_API_KEY, "pplx-"),
+    gemini: diagnoseKey(process.env.GEMINI_API_KEY, "AI"),
   };
 
   try {
