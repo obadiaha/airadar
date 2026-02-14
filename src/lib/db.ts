@@ -1,26 +1,37 @@
-import Database from "better-sqlite3";
 import path from "path";
+import fs from "fs";
 
 const DB_PATH = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "airadar.db");
 
-let _db: Database.Database | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _db: any = null;
 
-export function getDb(): Database.Database {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getDb(): any {
   if (!_db) {
-    // Ensure directory exists
-    const fs = require("fs");
-    const dir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    try {
+      // Dynamic import to avoid build-time issues on Vercel
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      
+      // Ensure directory exists
+      const dir = path.dirname(DB_PATH);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    _db = new Database(DB_PATH);
-    _db.pragma("journal_mode = WAL");
-    _db.pragma("foreign_keys = ON");
-    migrate(_db);
+      _db = new Database(DB_PATH);
+      _db.pragma("journal_mode = WAL");
+      _db.pragma("foreign_keys = ON");
+      migrate(_db);
+    } catch (error) {
+      console.error("Database init error (expected on Vercel serverless):", error);
+      throw new Error("Database not available. Use /api/scan/demo for demo mode.");
+    }
   }
   return _db;
 }
 
-function migrate(db: Database.Database) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function migrate(db: any) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
